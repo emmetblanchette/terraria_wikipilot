@@ -1,69 +1,41 @@
-import sys
-import types
 import unittest
 
-# Allow tests to run in environments missing optional third-party dependencies.
-if "requests" not in sys.modules:
-    requests_stub = types.ModuleType("requests")
-    requests_stub.RequestException = Exception
-    requests_stub.Session = object
-    sys.modules["requests"] = requests_stub
-
-if "bs4" not in sys.modules:
-    bs4_stub = types.ModuleType("bs4")
-
-    class _BeautifulSoup:  # pragma: no cover - simple import stub
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-    bs4_stub.BeautifulSoup = _BeautifulSoup
-    sys.modules["bs4"] = bs4_stub
-
-from terraria_wikipilot.models import SearchResult
-from terraria_wikipilot.query_service import QueryService, normalize_query
+from terraria_wikipilot.query_pipeline import QueryPipeline, normalize_query
+from terraria_wikipilot.query_service import QueryService
 
 
-class DummyClient:
-    def try_direct_page(self, _entity_guess):
-        return None
-
-    def search(self, _query):
-        return []
+class FakeIndex:
+    def search(self, _query, k=5):
+        return [
+            {
+                "title": "Duke Fishron",
+                "section": "Summoning",
+                "text": "Use a Truffle Worm as bait. Fish in the Ocean biome. Requires Hardmode.",
+            },
+            {
+                "title": "Duke Fishron",
+                "section": "Behavior",
+                "text": "Duke Fishron has multiple phases.",
+            },
+        ][:k]
 
 
 class QueryProcessingTests(unittest.TestCase):
-    def test_normalize_query(self) -> None:
-        info = normalize_query("How do I summon Duke Fishron?")
-        self.assertEqual(info["keywords"], ["summon", "duke", "fishron"])
-        self.assertEqual(info["entity_guess"], "duke fishron")
+    def test_normalize_query_reorders_for_entity_then_action(self) -> None:
+        self.assertEqual(normalize_query("how do i summon duke fishron"), "duke fishron summon")
 
-    def test_score_prefers_entity_page_over_ids(self) -> None:
-        service = QueryService(DummyClient())
-        entity = "eye of cthulhu"
-        keywords = ["summon", "eye", "cthulhu"]
+    def test_pipeline_answer_uses_preferred_section(self) -> None:
+        pipeline = QueryPipeline(index=FakeIndex())
+        answer = pipeline.answer("how do i summon duke fishron")
+        self.assertIsNotNone(answer)
+        self.assertEqual(answer.title, "Duke Fishron")
+        self.assertEqual(answer.section, "Summoning")
 
-        entity_score = service._score_result("Eye of Cthulhu", entity, keywords)
-        ids_score = service._score_result("Item IDs", entity, keywords)
-
-        self.assertGreater(entity_score, ids_score)
-
-    def test_resolve_uses_ranking(self) -> None:
-        class RankedClient:
-            def try_direct_page(self, _entity_guess):
-                return None
-
-            def search(self, _query):
-                return [
-                    SearchResult(title="Item IDs", pageid=1, snippet="..."),
-                    SearchResult(title="Eye of Cthulhu", pageid=2, snippet="..."),
-                ]
-
-        service = QueryService(RankedClient())
-        chosen, _ = service.resolve_wiki_page(
-            {"original": "how do i summon eye of cthulhu", "keywords": ["summon", "eye", "cthulhu"], "entity_guess": "eye of cthulhu"}
-        )
-        self.assertIsNotNone(chosen)
-        self.assertEqual(chosen.title, "Eye of Cthulhu")
+    def test_query_service_wraps_pipeline_output(self) -> None:
+        service = QueryService(query_pipeline=QueryPipeline(index=FakeIndex()))
+        response = service.ask("how do i summon duke fishron")
+        self.assertIsNotNone(response.page)
+        self.assertEqual(response.page.title, "Duke Fishron")
 
 
 if __name__ == "__main__":

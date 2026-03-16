@@ -11,7 +11,6 @@ from terraria_wikipilot.hotkey_manager import HotkeyManager
 from terraria_wikipilot.logging_utils import setup_logging
 from terraria_wikipilot.overlay.window import OverlayWindow
 from terraria_wikipilot.query_service import QueryService
-from terraria_wikipilot.wiki_client import WikiClient
 
 
 def main() -> int:
@@ -20,12 +19,7 @@ def main() -> int:
     config = load_config()
 
     app = QApplication(sys.argv)
-    query_service = QueryService(
-        WikiClient(
-            timeout_seconds=config.request_timeout_seconds,
-            search_limit=config.search_limit,
-        )
-    )
+    query_service = QueryService()
 
     window = OverlayWindow(config, query_service)
     hotkey_manager = HotkeyManager(config.hotkey, window.toggle_visible)
