@@ -84,6 +84,93 @@ Behavior notes:
    python app.py
    ```
 
+
+## Beginner test guide (with Terraria running)
+
+If you are new to coding, follow these exact steps.
+
+### 1) One-time install
+
+1. Install **Python 3.11+** from https://www.python.org/downloads/
+   - During install on Windows, check **“Add Python to PATH”**.
+2. Download this project folder to your PC (or clone it).
+3. Open a terminal in the project folder:
+   - **Windows**: File Explorer → open the folder → click address bar → type `cmd` → Enter.
+   - **macOS/Linux**: open Terminal and `cd` into the folder.
+4. Create a virtual environment:
+
+   ```bash
+   python -m venv .venv
+   ```
+
+5. Activate it:
+
+   - Windows (cmd):
+
+     ```bash
+     .venv\Scripts\activate
+     ```
+
+   - macOS/Linux:
+
+     ```bash
+     source .venv/bin/activate
+     ```
+
+6. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### 2) Start the overlay
+
+1. In the same terminal (with virtual env active), run:
+
+   ```bash
+   python app.py
+   ```
+
+2. You should see a small **Terraria Wikipilot** window in the bottom-right corner.
+
+### 3) Launch Terraria and test
+
+1. Start Terraria normally (Steam or standalone).
+2. While Terraria is focused, press **Ctrl+Alt+T** to toggle the overlay.
+3. Ask a question in the box, for example:
+   - `How do I summon the Eye of Cthulhu?`
+   - `What drops from Queen Bee?`
+4. Press **Enter** (or click **Ask**).
+5. Confirm you get:
+   - a short summary first
+   - source page title
+   - wiki URL
+
+### 4) Quick behavior checklist
+
+- Toggle show/hide instantly with hotkey.
+- Use **–** to collapse and **+** to expand.
+- **Clear** empties input/output.
+- **Copy Link** copies the source URL.
+- **Open Page** opens the full wiki page in your browser.
+
+### 5) If something does not work
+
+- **Hotkey does nothing**:
+  - Change to borderless/windowed Terraria and retry.
+  - On Linux Wayland, global hotkeys may be restricted; try X11.
+  - Change hotkey in `.env` (example: `WIKIPILOT_HOTKEY=ctrl+shift+f1`) and restart app.
+- **Overlay not visible over game**:
+  - Alt+Tab to overlay once, then back to Terraria.
+  - Try running Terraria in borderless window mode.
+- **No answers / errors**:
+  - Check your internet connection.
+  - Terraria Wiki access may be blocked by a proxy/firewall.
+
+### 6) Stop the app
+
+- Close the overlay window, or press `Ctrl+C` in the terminal.
+
 ## Hotkey behavior
 
 - Default hotkey: `Ctrl+Alt+T`
