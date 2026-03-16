@@ -76,12 +76,12 @@ Behavior notes:
    cp .env.example .env
    ```
 
-   Adjust values like `WIKIPILOT_HOTKEY` or `WIKIPILOT_OPACITY`.
+   Adjust values like `WIKIPILOT_HOTKEY`, `WIKIPILOT_OPACITY`, or `WIKIPILOT_LOG_LEVEL=DEBUG`.
 
 4. Run:
 
    ```bash
-   python app.py
+   python main.py
    ```
 
 
@@ -128,7 +128,7 @@ If you are new to coding, follow these exact steps.
 1. In the same terminal (with virtual env active), run:
 
    ```bash
-   python app.py
+   python main.py
    ```
 
 2. You should see a small **Terraria Wikipilot** window in the bottom-right corner.
@@ -174,6 +174,10 @@ If you are new to coding, follow these exact steps.
 ## Hotkey behavior
 
 - Default hotkey: `Ctrl+Alt+T`
+
+- If global hotkey registration fails (common on macOS without Accessibility permission), the app shows a clear help message and still supports local fallback shortcuts while focused:
+  - `Ctrl+`` toggles collapsed/expanded
+  - `Esc` hides the overlay
 - When pressed:
   - if hidden → shows overlay, brings it to front, re-anchors to bottom-right
   - if visible → hides overlay instantly

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+"""Qt overlay window for Terraria Wikipilot."""
+
 import logging
 import webbrowser
 from collections import deque
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from terraria_wikipilot.config import AppConfig
+from terraria_wikipilot.models import QueryResponse
 from terraria_wikipilot.query_service import QueryService
 from terraria_wikipilot.summarizer import format_response
 
@@ -26,10 +29,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class WorkerSignals(QObject):
+    """Signals emitted by async query workers."""
+
     finished = Signal(object)
 
 
 class QueryWorker(QRunnable):
+    """Background worker for wiki queries to avoid blocking UI."""
+
     def __init__(self, service: QueryService, query: str) -> None:
         super().__init__()
         self.service = service
@@ -42,6 +49,8 @@ class QueryWorker(QRunnable):
 
 
 class OverlayWindow(QMainWindow):
+    """Main overlay window with compact gameplay-focused UI."""
+
     def __init__(self, config: AppConfig, query_service: QueryService) -> None:
         super().__init__()
         self.config = config
@@ -60,6 +69,7 @@ class OverlayWindow(QMainWindow):
         self.setWindowOpacity(self.config.opacity)
 
         self._build_ui()
+        self._setup_local_shortcuts()
         self._apply_theme()
         self.anchor_bottom_right()
 
@@ -142,6 +152,14 @@ class OverlayWindow(QMainWindow):
         self.setCentralWidget(root)
         self.resize(self.config.width, self.config.expanded_height)
 
+    def _setup_local_shortcuts(self) -> None:
+        """Provide in-window fallback toggle shortcuts if global hook fails."""
+        self.local_toggle_shortcut = QShortcut(QKeySequence("Ctrl+`"), self)
+        self.local_toggle_shortcut.activated.connect(self.toggle_collapsed)
+
+        self.local_hide_shortcut = QShortcut(QKeySequence("Esc"), self)
+        self.local_hide_shortcut.activated.connect(self.hide)
+
     def _apply_theme(self) -> None:
         self.setStyleSheet(
             """
@@ -171,6 +189,10 @@ class OverlayWindow(QMainWindow):
             }
             """
         )
+
+    def set_status_message(self, message: str) -> None:
+        """Set a status message shown in the top-right area."""
+        self.loading_label.setText(message)
 
     def anchor_bottom_right(self) -> None:
         screen = QGuiApplication.primaryScreen()
@@ -211,7 +233,7 @@ class OverlayWindow(QMainWindow):
         worker.signals.finished.connect(self._on_query_complete)
         self.thread_pool.start(worker)
 
-    def _on_query_complete(self, response: object) -> None:
+    def _on_query_complete(self, response: QueryResponse) -> None:
         self._set_loading(False)
         formatted = format_response(response)
         self.answer_box.setPlainText(formatted)
