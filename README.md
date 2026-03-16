@@ -67,6 +67,7 @@ python main.py
 
 ## Notes
 
+- Quick maintenance note: if you need to re-open/recreate a PR, this repository is safe to re-PR after rerunning tests.
 - If no local KB exists, the app prompts you to run `python build_knowledge_base.py`.
 - macOS hotkeys use `pynput`; if permissions fail, enable:
   - System Settings → Privacy & Security → Accessibility
