@@ -6,7 +6,7 @@ Terraria Wikipilot is a desktop overlay prototype for gameplay assistance: hit a
 
 - **Python 3.11+**: fast local iteration and good desktop tooling.
 - **PySide6 (Qt)**: reliable always-on-top desktop overlay behavior, compact custom UI, keyboard/mouse input.
-- **keyboard**: global hotkey registration for quick show/hide.
+- **keyboard + pynput (macOS fallback)**: global hotkey registration for quick show/hide with better macOS reliability.
 - **requests + BeautifulSoup**: practical live wiki lookup + parsing pipeline (search, fetch, extract).
 - **python-dotenv**: simple config overrides without code edits.
 
@@ -52,9 +52,10 @@ This avoids risky game injection/hooking and delivers a real, usable overlay win
 Each question runs a clear flow:
 
 1. **User query**
-2. **Wiki search** using `action=query&list=search`
-3. **Page fetch** for top match using `action=parse`
-4. **Summarization/formatting** into short gameplay-focused output
+2. **Query normalization** into keywords + entity guess
+3. **Direct entity page resolve** attempt (`action=parse&page=...`)
+4. **Wiki search + deterministic ranking** when direct resolve fails
+5. **Section-aware extraction + formatting** into short gameplay-focused output
 
 Behavior notes:
 - Includes source page title + URL in results.
@@ -177,6 +178,7 @@ If you are new to coding, follow these exact steps.
 
 - If global hotkey registration fails (common on macOS without Accessibility permission), the app shows a clear help message and still supports local fallback shortcuts while focused:
   - `Ctrl+`` toggles collapsed/expanded
+  - `Ctrl+Shift+Space` toggles visibility while overlay is focused
   - `Esc` hides the overlay
 - When pressed:
   - if hidden → shows overlay, brings it to front, re-anchors to bottom-right

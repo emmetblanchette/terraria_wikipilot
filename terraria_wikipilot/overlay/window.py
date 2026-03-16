@@ -157,6 +157,9 @@ class OverlayWindow(QMainWindow):
         self.local_toggle_shortcut = QShortcut(QKeySequence("Ctrl+`"), self)
         self.local_toggle_shortcut.activated.connect(self.toggle_collapsed)
 
+        self.local_visibility_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), self)
+        self.local_visibility_shortcut.activated.connect(self.toggle_visible)
+
         self.local_hide_shortcut = QShortcut(QKeySequence("Esc"), self)
         self.local_hide_shortcut.activated.connect(self.hide)
 

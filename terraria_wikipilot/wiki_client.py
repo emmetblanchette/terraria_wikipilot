@@ -42,17 +42,30 @@ class WikiClient:
         for row in payload.get("query", {}).get("search", []):
             snippet_html = row.get("snippet", "")
             snippet = BeautifulSoup(unescape(snippet_html), "html.parser").get_text(" ", strip=True)
-            results.append(
-                SearchResult(
-                    title=row["title"],
-                    pageid=row["pageid"],
-                    snippet=snippet,
-                )
-            )
+            results.append(SearchResult(title=row["title"], pageid=row["pageid"], snippet=snippet))
         return results
 
+    def try_direct_page(self, title_guess: str) -> SearchResult | None:
+        """Try direct parse by guessed entity title; return minimal result if found."""
+        try_title = title_guess.strip().replace("_", " ").title()
+        params = {
+            "action": "parse",
+            "page": try_title.replace(" ", "_"),
+            "prop": "text",
+            "format": "json",
+        }
+        response = self.session.get(self.API_URL, params=params, timeout=self.timeout_seconds)
+        if response.status_code >= 400:
+            return None
+        payload = response.json()
+        parse_data = payload.get("parse")
+        if not parse_data:
+            return None
+        resolved_title = parse_data.get("title", try_title)
+        return SearchResult(title=resolved_title, pageid=0, snippet="Direct entity match")
+
     def fetch_page(self, title: str, user_query: str = "") -> WikiPage:
-        """Fetch and parse a page, prioritizing query-relevant answer text."""
+        """Fetch and parse a page with structured section extraction."""
         params = {
             "action": "parse",
             "page": title,
@@ -65,116 +78,85 @@ class WikiClient:
 
         soup = BeautifulSoup(html, "html.parser")
         sections = self._collect_sections(soup)
-        intro_summary = self._extract_intro_summary(soup)
-        summary = self._extract_focused_summary(user_query, intro_summary, sections)
-        interesting_sections = self._extract_interesting_sections(sections)
+        summary = self.extract_relevant_section(user_query, sections, soup)
 
         url_title = title.replace(" ", "_")
         return WikiPage(
             title=title,
             url=f"{self.WIKI_BASE}{url_title}",
             summary=summary,
-            sections=interesting_sections,
+            sections=self._extract_interesting_sections(sections),
         )
 
+    def extract_relevant_section(self, user_query: str, sections: dict[str, str], soup: BeautifulSoup) -> str:
+        """Choose and clean the most relevant section body for the given question."""
+        query_l = user_query.lower()
+
+        if any(term in query_l for term in {"summon", "spawn", "boss"}):
+            for candidate in ("Summoning", "Spawn", "Spawning"):
+                if candidate in sections:
+                    return self._clean_and_limit_text(sections[candidate])
+
+        if any(term in query_l for term in {"item", "craft", "obtain", "get"}):
+            for candidate in ("Obtaining", "Crafting"):
+                if candidate in sections:
+                    return self._clean_and_limit_text(sections[candidate])
+
+        return self._clean_and_limit_text(self._extract_intro_paragraph(soup))
+
     @staticmethod
-    def _extract_intro_summary(soup: BeautifulSoup) -> str:
-        """Extract the first substantial intro paragraph."""
+    def _extract_intro_paragraph(soup: BeautifulSoup) -> str:
+        """Extract first substantial intro paragraph text."""
         for paragraph in soup.select("p"):
             text = paragraph.get_text(" ", strip=True)
-            if len(text) > 90:
-                return re.sub(r"\s+", " ", text)
+            if len(text) > 80:
+                return text
         return "No concise summary was found on this page."
 
     @staticmethod
+    def _clean_and_limit_text(text: str, sentence_limit: int = 3) -> str:
+        """Remove citations/formatting and keep about N complete sentences."""
+        clean = re.sub(r"\[\d+\]", "", text)
+        clean = re.sub(r"\s+", " ", clean).strip()
+        sentences = re.split(r"(?<=[.!?])\s+", clean)
+        selected = [s.strip() for s in sentences if s.strip()][:sentence_limit]
+        if not selected:
+            return clean[:400]
+        result = " ".join(selected)
+        if result and result[-1] not in ".!?":
+            result += "."
+        return result
+
+    @staticmethod
     def _collect_sections(soup: BeautifulSoup) -> dict[str, str]:
-        """Collect section text by heading name."""
+        """Collect plain text for each h2/h3 section heading."""
         sections: dict[str, str] = {}
         for header in soup.select("h2, h3"):
             title = header.get_text(" ", strip=True).replace("[edit]", "").strip()
             if not title:
                 continue
 
-            pieces: list[str] = []
+            parts: list[str] = []
             for sib in header.find_next_siblings():
                 if sib.name in {"h2", "h3"}:
                     break
-                txt = sib.get_text(" ", strip=True)
-                if txt:
-                    pieces.append(txt)
-                if len(" ".join(pieces)) > 700:
+                text = sib.get_text(" ", strip=True)
+                if text:
+                    parts.append(text)
+                if len(" ".join(parts)) > 1200:
                     break
 
-            if pieces:
-                sections[title] = re.sub(r"\s+", " ", " ".join(pieces))[:700]
+            if parts:
+                sections[title] = " ".join(parts)
+
         return sections
-
-    def _extract_focused_summary(
-        self,
-        user_query: str,
-        intro_summary: str,
-        sections: dict[str, str],
-    ) -> str:
-        """Prefer sections that best answer the user question; fallback to intro."""
-        query_l = user_query.lower()
-        section_names = {name.lower(): name for name in sections}
-
-        preferred_order = self._preferred_sections_for_query(query_l, section_names)
-        for section_name in preferred_order:
-            body = sections.get(section_name)
-            if body:
-                return body[:450]
-
-        for name, body in sections.items():
-            if any(term in name.lower() for term in ["overview", "behavior", "notes", "tips"]):
-                return body[:450]
-
-        return intro_summary
-
-    @staticmethod
-    def _preferred_sections_for_query(query_l: str, section_names: dict[str, str]) -> list[str]:
-        """Determine section priorities from question intent and page type clues."""
-        preferred: list[str] = []
-
-        if any(term in query_l for term in {"summon", "spawn", "boss"}):
-            preferred += [section_names.get("summoning", ""), section_names.get("spawning", "")]
-
-        if any(term in query_l for term in {"drop", "loot"}):
-            preferred += [section_names.get("drops", ""), section_names.get("loot", "")]
-
-        if any(term in query_l for term in {"craft", "recipe", "make"}):
-            preferred += [section_names.get("crafting", ""), section_names.get("recipes", "")]
-
-        if any(term in query_l for term in {"get", "obtain", "find", "farm"}):
-            preferred += [section_names.get("obtaining", ""), section_names.get("acquisition", "")]
-
-        # Generic boss/item-style priorities as backup.
-        preferred += [
-            section_names.get("summoning", ""),
-            section_names.get("crafting", ""),
-            section_names.get("obtaining", ""),
-            section_names.get("drops", ""),
-        ]
-
-        return [name for name in preferred if name]
 
     @staticmethod
     def _extract_interesting_sections(sections: dict[str, str]) -> dict[str, str]:
-        """Return concise set of gameplay-helpful sections for display."""
-        interesting = {
-            "Summoning",
-            "Spawning",
-            "Drops",
-            "Loot",
-            "Crafting",
-            "Recipes",
-            "Obtaining",
-            "Tips",
-            "Notes",
-            "Trivia",
-        }
-        result: dict[str, str] = {}
-        for title, body in sections.items():
-            if title in interesting:
-                result[title] = body[:450]
-        return result
+        """Return concise gameplay-helpful sections for secondary display."""
+        interesting = {"Summoning", "Spawn", "Spawning", "Obtaining", "Crafting", "Drops", "Notes"}
+        picked: dict[str, str] = {}
+        for name, body in sections.items():
+            if name in interesting:
+                picked[name] = WikiClient._clean_and_limit_text(body)
+        return picked
